@@ -78,14 +78,9 @@ class _TextToBytesWrapper(io.BufferedReader):
         # Random seeks are not allowed because of non-trivial conversion between byte and character offsets,
         # with the possibility of a byte offset landing within a character.
         if offset == 0 and whence == 0 or \
-           offset == 0 and whence == 2:
+               offset == 0 and whence == 2:
             # seek to start or end is ok
             super(_TextToBytesWrapper, self).seek(offset, whence)
-        else:
-            # Drop any other seek
-            # In this application this may happen when pystreambuf seeks during sync(), which can happen when closing
-            # a partially-read stream. Ex. when mminfo() only reads the header then exits.
-            pass
 
 
 def _read_body_array(cursor, long_type):
@@ -209,11 +204,7 @@ def _apply_field(data, field, no_pattern=False):
     if field is None:
         return data
     if field == "pattern":
-        if no_pattern:
-            return data
-        else:
-            return np.zeros(0)
-
+        return data if no_pattern else np.zeros(0)
     dtype = _field_to_dtype.get(field, None)
     if dtype is None:
         raise ValueError("Invalid field.")
@@ -422,7 +413,7 @@ def mmwrite(target, a, comment=None, field=None, precision=None, symmetry="AUTO"
     import numpy as np
     import scipy.sparse
 
-    if isinstance(a, list) or isinstance(a, tuple) or hasattr(a, "__array__"):
+    if isinstance(a, (list, tuple)) or hasattr(a, "__array__"):
         a = np.asarray(a)
 
     if symmetry == "AUTO":
@@ -464,7 +455,9 @@ def mmwrite(target, a, comment=None, field=None, precision=None, symmetry="AUTO"
             from scipy.sparse import coo_matrix
             coo_type = coo_matrix
             # CSC and CSR have specialized writers.
-            is_compressed = (isinstance(a, scipy.sparse.csc_matrix) or isinstance(a, scipy.sparse.csr_matrix))
+            is_compressed = isinstance(
+                a, (scipy.sparse.csc_matrix, scipy.sparse.csr_matrix)
+            )
             csr_types.append(scipy.sparse.csr_matrix)
     except ImportError:
         pass
@@ -476,8 +469,9 @@ def mmwrite(target, a, comment=None, field=None, precision=None, symmetry="AUTO"
             from scipy.sparse import coo_array
             coo_type = coo_array
             # CSC and CSR have specialized writers. The type may already be a cs*_matrix.
-            is_compressed = is_compressed or \
-                            (isinstance(a, scipy.sparse.csc_array) or isinstance(a, scipy.sparse.csr_array))
+            is_compressed = is_compressed or isinstance(
+                a, (scipy.sparse.csc_array, scipy.sparse.csr_array)
+            )
             csr_types.append(scipy.sparse.csr_array)
     except ImportError:
         pass
@@ -503,13 +497,13 @@ def mmwrite(target, a, comment=None, field=None, precision=None, symmetry="AUTO"
 
         if is_compressed:
             # CSC and CSR can be written directly
-            is_csr = any([isinstance(a, t) for t in csr_types])
+            is_csr = any(isinstance(a, t) for t in csr_types)
             _fmm_core.write_body_csc(cursor, a.shape, a.indptr, a.indices, data, is_csr)
         else:
             _fmm_core.write_body_coo(cursor, a.shape, a.row, a.col, data)
         return
 
-    raise ValueError("unknown matrix type: %s" % type(a))
+    raise ValueError(f"unknown matrix type: {type(a)}")
 
 
 def mminfo(source):
